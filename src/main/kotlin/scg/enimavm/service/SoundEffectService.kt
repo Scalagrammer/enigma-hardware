@@ -2,32 +2,40 @@ package scg.enimavm.service
 
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.runBlocking
 import scg.enimavm.service.MorseCode.*
-import scg.enimavm.utils.Position
-import scg.enimavm.utils.invoke
-import scg.enimavm.utils.toMorseCodes
-import java.util.concurrent.Executors
+import scg.enimavm.utils.*
+import java.io.Closeable
 import java.util.concurrent.Executors.newSingleThreadExecutor
 import javax.sound.sampled.*
 import javax.sound.sampled.AudioSystem.*
-import javax.sound.sampled.DataLine.Info
 
-private class Track(audio : AudioInputStream) {
+private class Track(audio : AudioInputStream) : Closeable {
 
-    private val dataLine = getLine(Info(SourceDataLine::class.java, audio.format)) as SourceDataLine
+    private val monitor = Object()
 
-    private val audioBytes = audio.readAllBytes()
+    private val timeline = Timeline(audio)
+
+    private val audioBytes = audio.use { it.readAllBytes() }
 
     init {
-        dataLine.open(audio.format)
-        dataLine.start()
+        timeline.open(audio.format)
+        timeline.start()
     }
 
-    fun replay() {
-        dataLine.write(audioBytes, 0, audioBytes.size)
-        dataLine.drain()
-    }
+    override fun close() = synchronized(monitor) {
+        timeline.takeIf { it.isOpen }?.run {
+            flush()
+            stop()
+            close()
+        }
+    } ?: Unit
+
+    fun replay() = synchronized(monitor) {
+        timeline.takeIf { it.isOpen }?.run {
+            write(audioBytes, 0, audioBytes.size)
+            drain()
+        }
+    } ?: Unit
 }
 
 interface SoundEffectService {
@@ -36,30 +44,28 @@ interface SoundEffectService {
 
 enum class MorseCode { DASH, DOT }
 
-class MorseCodeSoundEffectServiceImpl : SoundEffectService {
+class MorseCodeSoundEffectServiceImpl : SoundEffectService, Singleton {
+
+    private val IO = (newSingleThreadExecutor()).asCoroutineDispatcher()
 
     private val morsePlayer = Channel<List<MorseCode>>()
 
-    init { IO { for (codes in morsePlayer) codes.forEach { it.play() } } }
+    private val tracks = buildMap {
+        this[DOT]  = Track(loadAudioStream(DOT))
+        this[DASH] = Track(loadAudioStream(DASH))
+    }
+
+    init { IO { for (codes in morsePlayer) codes.forEach { tracks.getValue(it).replay() } } }
 
     override fun play(position : Position) = IO { morsePlayer.send(position.toMorseCodes()) }
 
+    override fun preDestroy() {
+        IO.close()
+        tracks.values.forEach(Track::close)
+    }
+
     private companion object {
-
-        private val IO = (newSingleThreadExecutor()).asCoroutineDispatcher()
-
-        private val dotTrack  = Track(getAudioStream(DOT))
-        private val dashTrack = Track(getAudioStream(DASH))
-
-        private suspend fun MorseCode.play() {
-            when (this) {
-                DOT  -> dotTrack.replay()
-                DASH -> dashTrack.replay()
-            }
-        }
-
-        private fun getAudioStream(code : MorseCode) : AudioInputStream {
-            return getAudioInputStream(this::class.java.classLoader.getResource("morse-sound-effects/${code.name.lowercase()}.wav"))
-        }
+        private fun loadAudioStream(code : MorseCode) =
+            getAudioInputStream(this::class.java.classLoader.getResource("morse-sound-effects/${code.name.lowercase()}.wav"))
     }
 }

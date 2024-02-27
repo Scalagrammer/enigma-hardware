@@ -5,7 +5,7 @@ plugins {
     application
 }
 
-group = "scg.enigma"
+group = "scg.hardware"
 version = "1.0-SNAPSHOT"
 
 repositories {
@@ -17,10 +17,6 @@ dependencies {
     implementation("scg.hardware:hardware-core:1.0.0")
     implementation("io.insert-koin:koin-core:3.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-    testImplementation("io.mockk:mockk:1.13.1")
-    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.1")
-
-    testImplementation(kotlin("test"))
 }
 
 tasks.test {

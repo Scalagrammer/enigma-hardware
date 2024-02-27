@@ -8,6 +8,8 @@ import scg.enimavm.model.Rotor.Companion.byIndex
 import scg.enimavm.model.Rotor.UKW_M
 import scg.enimavm.model.Swap
 import scg.enimavm.service.*
+import scg.enimavm.service.Mode.DECRYPTION
+import scg.enimavm.service.Mode.ENCRYPTION
 import scg.enimavm.utils.Position
 import scg.hardware.assembler.model.Hardware
 import scg.hardware.assembler.model.Reg
@@ -15,14 +17,15 @@ import scg.hardware.assembler.model.Reg.Companion.collect
 import scg.hardware.assembler.model.Reg.Companion.extract
 import scg.hardware.assembler.state.ExternalCall
 import scg.hardware.assembler.state.State
+import java.util.concurrent.CountDownLatch
 
 class EnigmaHardware : Hardware<EnigmaHardware>, KoinComponent {
 
-    private val keyboardService       : KeyboardService    by inject()
-    private val ledboardService       : LedboardService    by inject()
-    private val rotorService          : RotorService       by inject()
-    private val soundEffectService    : SoundEffectService by inject()
-    private val startupLatch          : StartupLatch       by inject()
+    private val keyboardService     : KeyboardService    by inject()
+    private val ledboardService     : LedboardService    by inject()
+    private val rotorService        : RotorService       by inject()
+    private val soundEffectService  : SoundEffectService by inject()
+    private val startupLatch        : StartupLatch       by inject()
 
     override fun State<EnigmaHardware>.wire() {
 
@@ -30,7 +33,9 @@ class EnigmaHardware : Hardware<EnigmaHardware>, KoinComponent {
         this += AwaitKeyReleased
 
         this += Reflect(defineReg("ex"))
+
         this += Translate(defineReg("sx"), defineReg("rx"))
+
         this += ShiftAlphabetSpace(
             defineReg("ra"),
             defineReg("rb"),
@@ -75,10 +80,10 @@ class EnigmaHardware : Hardware<EnigmaHardware>, KoinComponent {
     fun awaitKeyReleased() =
         requireStarted { keyboardService.awaitKeyReleased() }
 
-    fun show(position : Position) =
+    private fun show(position : Position) =
         requireStarted { ledboardService.show(position) }
 
-    fun hideAll() =
+    private fun hideAll() =
         requireStarted { ledboardService.hideAll() }
 
     private fun updatePosition(rotor : Position, position : Position) =
@@ -96,29 +101,18 @@ class EnigmaHardware : Hardware<EnigmaHardware>, KoinComponent {
     }
 }
 
-object AwaitKeyPressed : ExternalCall<EnigmaHardware> {
-
-    override val label = "await_key_pressed" to -252
-
+object AwaitKeyPressed : ExternalCall<EnigmaHardware>("await_key_pressed") {
     override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) = push(hardware.awaitKeyPressed())
-
 }
 
-object AwaitKeyReleased : ExternalCall<EnigmaHardware> {
-
-    override val label = "await_key_released" to -251
-
+object AwaitKeyReleased : ExternalCall<EnigmaHardware>("await_key_released") {
     override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) = hardware.awaitKeyReleased()
-
 }
 
 class Translate(
     private val sx : Reg,
     private val rx : Reg,
-) : ExternalCall<EnigmaHardware> {
-
-    override val label = "translate" to -253
-
+) : ExternalCall<EnigmaHardware>("translate") {
     override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) =
         extract(sx, rx) { (swap), rotorIndex ->
             with(hardware) { swap(rotorIndex, pop()) }.also { push(it) }
@@ -126,12 +120,8 @@ class Translate(
 }
 
 
-class Reflect(private val ex : Reg) : ExternalCall<EnigmaHardware> {
-
-    override val label = "reflect" to -254
-
-    override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) =
-        ex { (swap) -> with(hardware) { swap(pop()) }.also { push(it)} }
+class Reflect(private val ex : Reg) : ExternalCall<EnigmaHardware>("reflect") {
+    override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) = ex { (swap) -> with(hardware) { swap(pop()) }.also { push(it)} }
 }
 
 class ShiftAlphabetSpace(
@@ -143,12 +133,8 @@ class ShiftAlphabetSpace(
     private val rf : Reg,
     private val rg : Reg,
     private val rh : Reg,
-) : ExternalCall<EnigmaHardware> {
-
-    override val label = "shift_alphabet_space" to -255
-
-    override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) =
-        collect(ra, rb, rc, rd, re, rf, rg, rh) { hardware.rotate(it) }
+) : ExternalCall<EnigmaHardware>("shift_alphabet_space") {
+    override fun State<EnigmaHardware>.execute(hardware : EnigmaHardware) = collect(ra, rb, rc, rd, re, rf, rg, rh) { hardware.rotate(it) }
 }
 
 operator fun UInt.component1() : Swap = Swap.byIndex(this)

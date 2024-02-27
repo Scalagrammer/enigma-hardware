@@ -8,12 +8,12 @@ import scg.enimavm.utils.JPanel
 import java.awt.BorderLayout
 import java.awt.Color.BLACK
 import java.awt.event.*
-import javax.swing.ImageIcon
-import javax.swing.JFrame
-import javax.swing.JLabel
-import javax.swing.JPanel
+import java.util.concurrent.atomic.AtomicReference
+import javax.swing.*
 import javax.swing.SwingUtilities.invokeLater
 import javax.swing.WindowConstants.EXIT_ON_CLOSE
+
+enum class Mode { ENCRYPTION, DECRYPTION }
 
 interface LedboardService {
     fun show(position : Position)
@@ -41,6 +41,7 @@ class SwingUIServiceImpl : ComponentAdapter(), KoinComponent, LedboardService {
     private val ledsPane = JPanel(BorderLayout())
 
     init {
+
         JPanel(background = BLACK).run {
             northRow.forEach { add(getIconLabel(it)) }
             ledsPane.add(this, BorderLayout.NORTH)
@@ -114,3 +115,5 @@ class SwingUIServiceImpl : ComponentAdapter(), KoinComponent, LedboardService {
         }
     }
 }
+
+private operator fun <T> AtomicReference<T>.invoke(expected : T, new : T) : Boolean = compareAndSet(expected, new)

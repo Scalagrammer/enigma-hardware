@@ -6,6 +6,7 @@ import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.KeyEvent.*
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.atomic.AtomicReference
 
 sealed interface KeyboardService {
@@ -15,21 +16,21 @@ sealed interface KeyboardService {
 
 class SwingKeyboardService : KeyAdapter(), KeyboardService {
 
-    private val pressedKeys          = ArrayBlockingQueue<Position>(10, true)
-    private val releasedKeysFeedback = ArrayBlockingQueue<Unit>(10)
+    private val pressedKeys          = ArrayBlockingQueue<UInt>(5, true)
+    private val releasedKeysFeedback = ArrayBlockingQueue<Unit>(5, false)
     private val lastPressed          = AtomicReference<Char>()
 
     override fun keyPressed(e : KeyEvent) = e { pressedKeys.put(it) }
 
     override fun keyReleased(e : KeyEvent) = e { releasedKeysFeedback.put(Unit) }
 
-    override fun awaitKeyPressed() =
-        pressedKeys.take()
+    override fun awaitKeyPressed() : Position = pressedKeys.take()
 
-    override fun awaitKeyReleased() =
-        releasedKeysFeedback.take()
+    override fun awaitKeyReleased() { releasedKeysFeedback.take() }
 
     private operator fun KeyEvent.invoke(action : (Position) -> Unit) {
+
+        println(this)
 
         val keyPosition = position ?: return
 

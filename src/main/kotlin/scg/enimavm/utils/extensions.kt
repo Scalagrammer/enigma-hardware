@@ -2,17 +2,25 @@ package scg.enimavm.utils
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.future.future
+import org.koin.core.KoinApplication
+import org.koin.core.context.startKoin
+import org.koin.core.module.Module
 import scg.enimavm.model.Swap
 import scg.enimavm.service.MorseCode.DOT
 import scg.enimavm.service.MorseCode.DASH
 import java.awt.Color
 import java.awt.event.KeyEvent
 import java.util.Collections
+import javax.sound.sampled.AudioInputStream
+import javax.sound.sampled.AudioSystem.getLine
+import javax.sound.sampled.DataLine
+import javax.sound.sampled.SourceDataLine
 import javax.swing.JPanel
+import kotlin.concurrent.thread
 import kotlin.reflect.KProperty
+
+typealias Timeline = SourceDataLine
 
 val keyByPosition = buildMap {
     this[0U] =  "A"
@@ -101,32 +109,39 @@ private val morseCodesByPosition = buildMap {
     this[25U] = /* Z */ listOf(DASH, DASH, DOT, DOT)
 }
 
+fun KoinApplication.initialize() = apply {
+    for (component in koin.getAll<Singleton>()) component.postConstruct()
+}
+
+infix fun Module.bind(scope : KoinApplication.() -> Unit) {
+    startKoin { modules(this@bind) }.scope()
+}
+
+fun Timeline(stream : AudioInputStream) =
+    getLine(DataLine.Info(Timeline::class.java, stream.format)) as Timeline
+
+fun KoinApplication.destroyOnShutdown() = apply {
+
+    val hook = thread(start = false) {
+        for (component in koin.getAll<Singleton>())
+            runCatching(component::preDestroy)
+                .onFailure(Throwable::printStackTrace)
+    }
+
+    Runtime.getRuntime()
+        .addShutdownHook(hook)
+
+}
+
 fun JPanel(background : Color) =
     JPanel().apply { this.background = background }
 
 val KeyEvent.position : Position?
     get() = (keyChar.uppercaseChar()).let { positionByKey[it] }
 
-fun Stack.pop(n : Int) : List<Operand> = buildList { repeat(n) { add(pop()) } }
-
-inline fun <R> Stack.popMap(transform : (Operand) -> R) : R = transform(pop())
-
-inline fun <T> List<T>.forEver(action : (T) -> Unit) {
-    if (isEmpty()) return
-
-    var itemIndex = 0
-
-    while(true) action(get(itemIndex)).also {
-        itemIndex = (itemIndex + 1) % size
-    }
-}
-
 fun <T> MutableList<T>.rotate(n: Int) = Collections.rotate(this, n)
 
 operator fun CoroutineDispatcher.invoke(callback : suspend () -> Unit) { CoroutineScope(this).future { callback() } }
-
-fun <A, R> CoroutineScope.traverse(items : List<A>, scope : suspend CoroutineScope.(A) -> Deferred<R>) : List<R> =
-    future { items.map { scope(it) }.awaitAll() }.join()
 
 fun Position.toMorseCodes() = morseCodesByPosition.getValue(this)
 
