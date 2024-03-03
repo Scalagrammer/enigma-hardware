@@ -1,5 +1,6 @@
-Enigma M4 simulator implementation for hardware library (kotlin virtual asm) with reflection schema from Russian Fialka M125 (magic-circuit).
 ![Снимок экрана 2024-03-03 в 21 16 51](https://github.com/Scalagrammer/enigma-hardware/assets/39617069/4898a052-626f-453c-a546-29c2b6a65944)
+
+Enigma M4 simulator implementation for hardware library (kotlin virtual asm) with reflection schema from Russian Fialka M125 (magic-circuit).
 ```
 .define
 req ra, rb, rc, re, rf, rg, rh, ex, sx, lx, mx, rx, gx
